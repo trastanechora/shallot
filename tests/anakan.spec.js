@@ -1,0 +1,50 @@
+import {test,expect} from '@playwright/test';
+import {mkdirSync} from 'node:fs';
+const url=process.env.ATLAS_URL||'http://127.0.0.1:5173';
+
+test('daughter formation is visible, scrubbable, and remains educational without motion',async({page})=>{
+ test.setTimeout(90000);
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
+ await page.setViewportSize({width:1440,height:1080});
+ await page.emulateMedia({reducedMotion:'reduce'});
+ await page.goto(url);
+ await page.getByRole('button',{name:'3 Pembentukan anakan',exact:true}).click();
+ await expect(page.locator('.shoot-label').filter({hasText:'Tunas utama'})).toBeVisible();
+ await expect(page.locator('.shoot-label').filter({hasText:'Anakan'})).toBeVisible();
+ const slider=page.getByRole('slider',{name:'Perkembangan anakan'});
+ await expect(slider).toBeVisible();
+ await expect(page.getByRole('region',{name:'Dari tunas menjadi rumpun'})).toContainText('bukan membelah');
+ await expect(page.getByText('Jumlah anakan pada model ini hanya ilustrasi')).toBeVisible();
+ await slider.fill('0');await expect(page.getByTestId('shoot-summary')).toContainText('1 tunas utama · 0 anakan');
+ await expect(page.getByRole('switch',{name:'Putar otomatis'})).toBeDisabled();
+ await page.locator('canvas').scrollIntoViewIfNeeded();await page.waitForTimeout(300);
+ const start=await page.locator('canvas').screenshot();
+ await slider.fill('100');await expect(page.getByTestId('shoot-summary')).toContainText('1 tunas utama · 4 anakan');
+ await page.locator('canvas').scrollIntoViewIfNeeded();await page.waitForTimeout(500);
+ expect((await page.locator('canvas').screenshot()).equals(start)).toBe(false);
+ mkdirSync('screenshots',{recursive:true});
+ await page.screenshot({path:'screenshots/anakan-soil-on.png',fullPage:true});
+ await page.getByRole('switch',{name:'Tampilkan tanah'}).click();
+ await page.waitForTimeout(500);await page.screenshot({path:'screenshots/anakan-soil-off.png',fullPage:true});
+ await page.getByRole('button',{name:'Atur ulang tampilan',exact:true}).click();
+ await expect(slider).toHaveValue('100');
+ await page.getByRole('button',{name:'Irisan umbi',exact:true}).click();
+ await expect(page.getByText('Detail dan irisan menampilkan tunas utama saja.')).toBeVisible();
+ await page.getByRole('button',{name:'Lihat rumpun anakan',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Tanaman utuh',exact:true})).toHaveAttribute('aria-pressed','true');
+ await page.setViewportSize({width:390,height:844});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await slider.fill('50');await expect(slider).toHaveValue('50');
+ await page.screenshot({path:'screenshots/anakan-mobile.png',fullPage:true});
+ expect(errors).toEqual([]);
+});
+
+test('fallback retains anakan explanation and slider',async({page})=>{
+ await page.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args);};});
+ await page.goto(url);
+ await page.getByRole('button',{name:'3 Pembentukan anakan',exact:true}).click();
+ await expect(page.getByText('Cara lain untuk menjelajah.')).toBeVisible();
+ await page.getByRole('slider',{name:'Perkembangan anakan'}).fill('100');
+ await expect(page.getByTestId('shoot-summary')).toContainText('4 anakan');
+ await expect(page.getByRole('region',{name:'Dari tunas menjadi rumpun'})).toContainText('tunas lateral');
+});

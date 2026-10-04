@@ -1,0 +1,47 @@
+import {test,expect} from '@playwright/test';
+import {mkdirSync} from 'node:fs';
+const url=process.env.ATLAS_URL||'http://127.0.0.1:5173';
+test('optional seed preparation compares real top cut, returns intact and keeps later stages sane',async({page})=>{
+ test.setTimeout(90000);mkdirSync('screenshots',{recursive:true});
+ const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.setViewportSize({width:1440,height:1080});await page.goto(url);
+ await expect(page.getByRole('group',{name:'Persiapan umbi bibit · opsional'})).toHaveCount(0);
+ await page.getByRole('button',{name:'1 Penanaman',exact:true}).click();
+ const intact=page.getByRole('button',{name:'Umbi utuh',exact:true});
+ const cut=page.getByRole('button',{name:'Ujung atas dipotong ±⅓',exact:true});
+ await expect(intact).toHaveAttribute('aria-pressed','true');
+ await cut.click();await expect(cut).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByTestId('preparation-caption')).toContainText('Tampilan persiapan');
+ await expect(page.getByRole('switch',{name:'Tampilkan tanah'})).toBeDisabled();
+ await expect(page.getByRole('switch',{name:'Tampilkan tanah'})).toHaveAttribute('aria-checked','false');
+ const note=page.getByRole('region',{name:'Pemotongan bukan kewajiban'});
+ for(const text of ['dormansi','masa simpan','Tidak wajib','tunas','cakram dasar','luka','alat bersih','bervariasi'])await expect(note).toContainText(text);
+ await expect(note.getByRole('link')).toHaveCount(2);
+ await page.locator('canvas').scrollIntoViewIfNeeded();await page.waitForTimeout(700);
+ const cutImage=await page.locator('canvas').screenshot({path:'screenshots/seed-cut-canvas.png'});
+ await page.screenshot({path:'screenshots/seed-cut.png',fullPage:true});
+ await intact.click();await page.waitForTimeout(500);
+ const intactImage=await page.locator('canvas').screenshot({path:'screenshots/seed-intact-canvas.png'});
+ expect(cutImage.equals(intactImage)).toBe(false);
+ await page.screenshot({path:'screenshots/seed-intact.png',fullPage:true});
+ await cut.click();await page.getByRole('button',{name:'Atur ulang tampilan',exact:true}).click();
+ await expect(intact).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('switch',{name:'Tampilkan tanah'})).toHaveAttribute('aria-checked','true');
+ await cut.click();await page.getByRole('button',{name:'5 Pembentukan umbi',exact:true}).click();
+ await expect(cut).toHaveCount(0);await expect(page.getByTestId('preparation-caption')).toHaveCount(0);
+ await page.getByRole('button',{name:'1 Penanaman',exact:true}).click();await expect(intact).toHaveAttribute('aria-pressed','true');
+ await cut.click();await page.getByRole('button',{name:'Irisan umbi',exact:true}).click();
+ await expect(intact).toHaveAttribute('aria-pressed','true');await expect(page.getByText('Irisan memperlihatkan lapisan umbi yang berdaging.')).toBeVisible();
+ expect(errors).toEqual([]);
+});
+
+test('preparation education remains usable on mobile with fallback and reduced motion',async({page})=>{
+ await page.addInitScript(()=>{const original=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(type,...args){return type.includes('webgl')?null:original.call(this,type,...args);};});
+ await page.setViewportSize({width:390,height:844});await page.emulateMedia({reducedMotion:'reduce'});await page.goto(url);
+ await page.getByRole('button',{name:'1 Penanaman',exact:true}).click();
+ await page.getByRole('button',{name:'Ujung atas dipotong ±⅓',exact:true}).click();
+ await expect(page.getByText('Cara lain untuk menjelajah.')).toBeVisible();
+ await expect(page.getByRole('region',{name:'Pemotongan bukan kewajiban'})).toContainText('cakram dasar');
+ await expect(page.getByRole('switch',{name:'Putar otomatis'})).toBeDisabled();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+});

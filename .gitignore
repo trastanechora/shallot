@@ -1,0 +1,13 @@
+node_modules/
+dist/
+test-results/
+playwright-report/
+screenshots/
+/*.png
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+DEPLOYMENT.md
+SCALE-VERIFICATION.md
